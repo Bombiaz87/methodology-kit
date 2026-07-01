@@ -1,0 +1,65 @@
+# KIT · [Node-ref] — gitleaks config (secret scanner). Expected behavior: extends the ~150
+# upstream rules (AWS, GCP, Stripe, GitHub, generic high-entropy, age-secret-key, ...) and
+# adds a targeted allowlist for the KNOWN false positives of your repo. Adapt the entries to yours.
+#
+# In plain language: this file prevents a fake-secret example (in a test or in a
+# documentation page) from triggering the alarm and blocking commits. Every exception is
+# documented with the WHY: don't add entries "at random", or you open a security hole.
+#
+# Config docs: https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "{{PROJECT}} allowlist — known false positives, each documented"
+
+# FAKE secret strings used as examples in the documentation and in the CI self-check step.
+# They must stay in the sources to illustrate the system, but they are not real leaks — just strings
+# that match the regex shape of their respective providers. (For smoke tests of real leaks, files
+# in /tmp are used, outside the repo: no allowlist needed there.)
+regexes = [
+  '''AKIA1234567890ABCDEF''',                 # example: fake AWS access key (16-char, not real)
+  '''sk_live_4eC39HqLyjWDarjtT1zdp7dc''',     # example: sample key from provider docs, quoted in the notes
+]
+
+paths = [
+  # sops envelope: ENC[AES256_GCM,data:...,iv:...,tag:...] triggers generic high-entropy
+  # but it's already encrypted — it's the correct format for secrets at rest.
+  '''secrets/.*\.enc\.yaml$''',
+
+  # Age key fixture COMMITTED for round-trip tests (encrypts only low-value dev values,
+  # NEVER prod). Threat model documented in secrets/README.md.
+  '''scripts/tests/fixtures/age/.*\.age$''',
+  '''scripts/tests/fixtures/age/.*\.pub$''',
+
+  # Integrity hashes (sha512-...) in the lockfile trigger entropy checks.
+  '''pnpm-lock\.yaml$''',
+
+  # Gitignored files (never committed) but gitleaks --no-git scans the filesystem:
+  # they exist only in local dev, never in the repo or CI.
+  '''\.env$''',
+  '''\.env\.local$''',
+  '''\.env\..*\.local$''',
+
+  # .claude/ — ONLY the local/gitignored artifacts (personal allow-list, backups, task lock,
+  # worktree). Do NOT allowlist all of `.claude/.*`: the kit commits skills/commands/settings, and
+  # those files must be scanned (a secret pasted into a skill must trigger).
+  '''\.claude/settings\.local\.json$''',
+  '''\.claude/settings\.local\.json\.bak\..*''',
+  '''\.claude/scheduled_tasks\.lock$''',
+  '''\.claude/worktrees/.*''',
+
+  # Build artifacts and cache (redundant with gitleaks defaults, explicit for clarity).
+  '''\.turbo/.*''',
+  '''node_modules/.*''',
+  '''\.next/.*''',
+  '''out/.*''',
+  '''dist/.*''',
+  '''build/.*''',
+
+  # Test fixture: non-secret strings (ids, slugs, names) that generic-high-entropy can
+  # mistake for API keys. Layout-agnostic: covers test/tests/__tests__/fixtures anywhere,
+  # both single-app and monorepo. (Adapt/restrict to YOUR layout if you want.)
+  '''(^|/)(tests?|__tests__|fixtures)/.*''',
+]

@@ -1,0 +1,94 @@
+// KIT · [Node-ref] — package.json fragment (NOT a complete file): paste these blocks into your
+// root package.json. Expected behavior: canonical scripts + git-hooks that run the sentinels at
+// the right moment. Adapt {{PKG_MANAGER}} (pnpm shown here as an example) and {{PROCESS_MANAGER}}.
+//
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// NOTE ON biome.json → "!.claude" (why we exclude it from lint/format)
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// The files in .claude/ (in particular the orchestrator .js workflows and the harness scripts) use
+// patterns NOT parsable by Biome as a standard module — e.g. top-level `return`. If Biome includes
+// them, it fails the parse and keeps CI red.
+//   Real example: a missing `!.claude` in the allowlist kept CI red for ~2 days before it was
+//   understood that the red came from a .js workflow, not from the product code.
+// ALWAYS keep "!.claude" among the files.includes exclusions in biome.json.
+// Same principle for GENERATED FILES (e.g. the maps in docs/.../30-reference/): if the formatter
+// rewrites them, they diverge from the generator's output on the first re-run → exclude them from
+// the formatter (Biome files.includes, or .prettierignore if you use prettier). See handbook/04
+// "Generator rules": a committed artifact must be a PURE and DETERMINISTIC function of the source.
+//
+// ───────────────────────────────────────────────────────────────────────────────────────────
+// In plain language: these are the project's base commands (lint, test, checks) plus the
+// "git hooks" that fire the checks by themselves when you commit / push, so you don't
+// forget. The note above explains why a certain folder has to be excluded from the linter.
+// ───────────────────────────────────────────────────────────────────────────────────────────
+
+{
+  "packageManager": "{{PKG_MANAGER}}",
+
+  "scripts": {
+    // — code quality —
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "turbo run check",
+
+    // — tests in SERIAL (--concurrency=1): packages that touch {{DB}} would wipe each other's
+    //   shared state if they ran in parallel → false reds. Always serial. —
+    "test": "turbo run test --concurrency=1",
+
+    // — living state machine + sentinels —
+    "update-state": "node scripts/update-state.mjs",
+    "check:state-size": "node scripts/check-state-size.mjs",
+    "check:harness-refs": "node scripts/check-harness-refs.mjs",
+    "coherence:check": "node scripts/check-coherence.mjs",
+    "direction:check": "node scripts/check-coherence.mjs",
+    "validate-docs": "node scripts/validate-docs.mjs",
+
+    // — index/map generators (derived, never by hand) —
+    "gen-adr-map": "node scripts/generate-adr-map.mjs",
+    "gen-module-map": "node scripts/generate-module-map.mjs",
+
+    // — encrypted secrets (sops+age) —
+    "secrets:edit": "node scripts/load-secrets-sops.mjs",
+    // test:secrets — NOT shipped with the kit (it needs an age fixture + a roundtrip test on YOUR
+    //   sops setup). Create it when you turn secrets on, and keep it OUTSIDE the test:guards glob (it
+    //   would run in CI without sops/age → red). Reference form:
+    //   "test:secrets": "SOPS_AGE_KEY_FILE=scripts/tests/fixtures/age/dev-test.age node --test scripts/tests/secrets-roundtrip.test.mjs",
+
+    // — sentinel tests (guards-are-tested). NB: pass a QUOTED GLOB, not a directory:
+    //   `node --test scripts/tests/` FAILS on Windows/Node22 (treats the path as a module →
+    //   MODULE_NOT_FOUND). Node expands the quoted glob internally, cross-shell. —
+    "test:guards": "node --test \"scripts/tests/**/*.test.mjs\"",
+
+    // — git hooks (activated by prepare) —
+    "prepare": "simple-git-hooks || true"
+  },
+
+  // The git hooks call the sentinels at the right moment of the lifecycle:
+  //   pre-commit  → blocks the commit if it finds a plaintext secret (gitleaks)
+  //   post-commit → realigns the living state machine (doesn't block: runs after the commit)
+  //   pre-push    → quality gate before publishing; the "soft" sentinels don't block
+  //                 (|| true) — they inform, they don't bar the way.
+  //
+  // profile:team — on a shared origin, LOCAL hooks aren't enough (per-machine, bypassable):
+  //   the SAME checks run as a REQUIRED CHECK in CI (.github/workflows/ci.yml), which is the
+  //   shared gate. The local hooks stay an optional convenience, not the gate. See
+  //   handbook/09-operating-profiles.md + reference/pattern-ci.md.
+  "simple-git-hooks": {
+    "pre-commit": "bash scripts/run-gitleaks-precommit.sh",
+    "post-commit": "node scripts/update-state.mjs",
+    // profile:team — this autostamp rewrites a SHARED STATE.md → merge conflicts across branches.
+    //   In team, OMIT the post-commit line (or run with STATE_AUTOSTAMP=off): git already carries the
+    //   commit metadata and volatile state lives on the tracker. See handbook/04 + 09.
+    "pre-push": "{{PKG_MANAGER}} lint && {{PKG_MANAGER}} check && node scripts/check-state-size.mjs && (node scripts/check-coherence.mjs || true) && (node scripts/check-harness-refs.mjs || true)"
+  },
+
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
+    // required by scripts/validate-docs.mjs and scripts/load-secrets-sops.mjs (YAML parsing).
+    // A "drop-in" [Node-ref] script that imports a dep must DECLARE it, not take it for granted:
+    // without it, those scripts fail on startup. (check-state-size is instead zero-dep on purpose.)
+    "js-yaml": "^4.1.0",
+    "simple-git-hooks": "^2.11.1",
+    "turbo": "^2.3.0"
+  }
+}

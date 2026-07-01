@@ -1,0 +1,35 @@
+# KIT · [Node-ref] — sops+age config (secrets encrypted in the repo). Expected behavior:
+# `creation_rules` declares WHICH age public key encrypts WHICH file. Rename to `.sops.yaml`
+# and replace the recipients with YOUR age public keys. Adapt the path_regex to your envs.
+#
+# Model: the PUBLIC key is committed (it's only needed to encrypt); the PRIVATE key lives ELSEWHERE
+# (never in the repo — password manager / CI secret). Whoever has the private key can decrypt.
+#
+# In plain language: the project's secrets live in the repo, but encrypted. This file says "which
+# lock to close each drawer with". The lock (public key) is here; the key to
+# open it (private) only you and CI have, outside the repo.
+#
+# Flow: you edit a secret with `{{PKG_MANAGER}} secrets:edit` (opens, decrypts, re-encrypts on save).
+# When you add a new recipient below, run `sops updatekeys secrets/<file>.enc.yaml`
+# to re-encrypt the existing files with the new recipient (only changes the envelope, not the values).
+
+creation_rules:
+  - path_regex: secrets/dev\.enc\.yaml$
+    # Recipients (age PUBLIC keys, comma-separated):
+    # 1. Test fixture key — committed in scripts/tests/fixtures/age/, encrypts ONLY low-value
+    #    dev values; needed for test round-trip and decrypt in the test CI pipeline.
+    # 2. The {{OPERATOR}}'s personal key — private, in a password manager, NEVER in the repo.
+    age: >-
+      age1exampledevfixturepublickeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,age1exampleoperatorpublickeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  # Staging/prod files: same structure, but recipient = ONLY real keys (operator + CI deploy).
+  # Do NOT include the test fixture key here (prod secrets must not be openable by tests).
+  # - path_regex: secrets/prod\.enc\.yaml$
+  #   age: >-
+  #     age1exampleoperatorpublickeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,age1examplecideploykeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ── Committed test fixture (reference) ────────────────────────────────────────────────
+# To run `{{PKG_MANAGER}} test:secrets` you need a test PRIVATE age key committed at:
+#   scripts/tests/fixtures/age/dev-test.age   (private, test-only — low value, never prod)
+# and the corresponding public one in the recipients above. It's the only private key that lives in
+# the repo, on purpose: it encrypts fixtures only, and can never decrypt staging/prod.

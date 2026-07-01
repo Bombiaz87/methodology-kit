@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "globalDependencies": [".env", ".env.local", "packages/<DATA_LAYER>/migrations/**"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", ".astro/**", "out/**"],
+      "inputs": ["src/**", "public/**", "package.json", "tsconfig.json", "*.config.*"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "inputs": ["src/**", "tests/**", "package.json"],
+      "env": ["DATABASE_URL", "LOG_LEVEL", "NODE_ENV"]
+    },
+    "@scope/<PKG_WITH_SECRET>#test": {
+      "dependsOn": ["^build", "@scope/<DATA_LAYER>#test"],
+      "outputs": [],
+      "inputs": ["src/**", "tests/**", "package.json"],
+      "env": ["DATABASE_URL", "LOG_LEVEL", "NODE_ENV", "AUTH_SECRET"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "check": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

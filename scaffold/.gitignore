@@ -1,0 +1,54 @@
+# KIT · [Node-ref] — .gitignore that ENFORCES the kit's conventions (not just hygiene).
+# Every group below is load-bearing: it explains WHY that line must stay ignored.
+
+# --- Dependencies & build output (noise, not source; regenerable) ---
+node_modules/
+.pnpm-store/
+dist/
+out/
+.astro/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# --- Env: environment secrets NEVER go into the repo ---
+.env
+.env.local
+.env.*.local
+
+# --- Claude Code (LOAD-BEARING) ---
+# NB: the kit deliberately COMMITS .claude/settings.json + skills/ + commands/ (harness assets
+# shared with the team) and ignores ONLY the local parts below. If instead in YOUR repo you
+# gitignore all of .claude/, add the exceptions or the assets won't be shared:
+#   !.claude/settings.json
+#   !.claude/skills/
+#   !.claude/commands/
+# settings.local.json is the PERSONAL per-machine allow-list: it's gitignored on purpose
+# (it grows, contains literal paths/env of your machine, must not be shared nor committed).
+.claude/settings.local.json
+# Dated backups from periodic pruning of the allow-list: same reason, never in the repo.
+.claude/settings.local.json.bak.*
+# Scheduled tasks lock: local runtime state of the harness, not shareable.
+.claude/scheduled_tasks.lock
+# Ephemeral worktrees created by agents: work artifacts, not source.
+.claude/worktrees/
+
+# --- Encrypted secrets (LOAD-BEARING) ---
+# Private encryption keys (e.g. age) NEVER go into the repo: kept outside (password manager + offline backup).
+# *.age is ignored with ONE exception: the test-only committed fixture, needed for the encrypt/decrypt round-trip tests.
+*.age
+!scripts/tests/fixtures/age/dev-test.age
+# Temporary DECRYPTED output: the plaintext product of a decrypt is never committed.
+secrets/*.dec.yaml
+secrets/*.plain.yaml
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Logs ---
+*.log
+logs/

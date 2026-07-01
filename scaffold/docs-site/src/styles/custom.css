@@ -1,0 +1,12 @@
+/* KIT · [Node-ref] — doc-site custom CSS, loaded from astro.config.mjs (customCss).
+   Empty on purpose: add Starlight token overrides here whenever you want
+   (e.g. --sl-color-accent, font, widths). It exists because the config references it:
+   if you'd rather not have it, also remove the `customCss: [...]` line from astro.config.mjs. */
+
+/* Example (commented out): customize the theme accent.
+:root {
+  --sl-color-accent-low: #1e293b;
+  --sl-color-accent: #3b82f6;
+  --sl-color-accent-high: #bfdbfe;
+}
+*/

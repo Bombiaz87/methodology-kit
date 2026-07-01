@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(npm install *)",
+      "Bash(npm install)",
+      "Bash(npm i *)",
+      "Bash(npm i)",
+      "Bash(npm add *)",
+      "Bash(npm uninstall *)",
+      "Bash(npx *)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm install *)",
+      "Bash(yarn add *)",
+      "Bash(apt install *)",
+      "Bash(apt-get install *)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Edit({{REPO_PATH}}/**/migrations/**)",
+      "Write({{REPO_PATH}}/**/migrations/**)",
+      "Read({{REPO_PATH}}/**/.next/**)",
+      "Read({{REPO_PATH}}/**/.turbo/**)",
+      "Read({{REPO_PATH}}/**/dist/**)",
+      "Read({{REPO_PATH}}/**/out/**)",
+      "Read({{REPO_PATH}}/**/coverage/**)",
+      "Read({{REPO_PATH}}/**/*.tsbuildinfo)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "node scripts/hook-session-brief.mjs" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node scripts/hook-handoff-reminder.mjs" }] }
+    ]
+  },
+  "enabledMcpjsonServers": []
+}

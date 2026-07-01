@@ -1,0 +1,50 @@
+# KIT · [Node-ref] · profile:team — CI as a required-check on the origin (the shared chokepoint).
+# Behavior (AGNOSTIC, this is what carries over — not the YAML): on every PR to main it runs the
+# SAME checks as the local pre-push, but as a MANDATORY gate that no dev can bypass.
+# If your stack isn't Node, rewrite the steps in your runner (GitLab CI, etc.) — the point is
+# "the sentinels run in CI", not this file. See reference/pattern-ci.md (the "full,
+# growing-cost" archetype) and handbook/09-operating-profiles.md.
+#
+# The `run:` steps are quoted on purpose: with the unquoted `{{...}}` placeholders the YAML wouldn't parse.
+# After copying: make these jobs REQUIRED in `main`'s branch protection rules (otherwise
+# the PR stays mergeable with a red CI — the shared gate doesn't kick in).
+# Third-party actions are pinned by commit SHA (handbook/08 §5c): the `# vX.Y.Z` comment is the
+# human-readable version — bump the SHA and the comment together.
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - name: Install
+        run: "{{PKG_MANAGER}} install --frozen-lockfile"   # adapt: npm ci / pnpm i --frozen-lockfile / bun i
+      - name: Lint + format (drift = error)
+        run: "{{PKG_MANAGER}} run lint"
+      - name: Check (types/build)
+        run: "{{PKG_MANAGER}} run check"
+      - name: Validate docs (frontmatter graph)
+        run: "{{PKG_MANAGER}} run validate-docs"
+      - name: Docs coherence (sentinel)
+        run: "{{PKG_MANAGER}} run coherence:check"
+      - name: Board size guard
+        run: "{{PKG_MANAGER}} run check:state-size"
+      - name: Guards-are-tested
+        run: "{{PKG_MANAGER}} run test:guards"
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0   # gitleaks scans the whole history on the PR
+      - name: Gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0

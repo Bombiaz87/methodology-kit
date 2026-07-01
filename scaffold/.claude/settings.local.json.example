@@ -1,0 +1,54 @@
+{
+  "_KIT_NOTE": [
+    "KIT · [agnostic] — PERSONAL allow-list, two levels. Copy to settings.local.json (without .example).",
+    "This file is GITIGNORED: it's per-machine, not shared, and grows over time because the harness appends to it the exact commands you approve on the fly.",
+    "PRUNE it periodically: save a dated backup (settings.local.json.bak.YYYY-MM-DD, also gitignored) and remove dead lines (one-off, paths that no longer exist, literal envs).",
+    "RULE: only convenience or broad read-only permissions here. Anything that's a real security floor (deny install/edit generated dirs) belongs in the SHARED settings.json, not here.",
+    "The {{...}} placeholders must be replaced with your project's real values on first use."
+  ],
+  "permissions": {
+    "allow": [
+      "Read(//var/**)",
+      "Read(//tmp/**)",
+      "Read(//root/.claude/**)",
+
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(stat *)",
+      "Bash(file *)",
+      "Bash(tree *)",
+      "Bash(realpath *)",
+      "Bash(readlink *)",
+      "Bash(basename *)",
+      "Bash(dirname *)",
+      "Bash(echo *)",
+      "Bash(jq *)",
+      "Bash(xargs *)",
+      "Bash(df *)",
+      "Bash(du *)",
+      "Bash(free *)",
+      "Bash(uptime)",
+      "Bash(ps *)",
+
+      "Bash(git *)",
+      "Bash({{PKG_MANAGER}} *)",
+      "Bash(node *)",
+      "Bash({{PROCESS_MANAGER}} *)",
+
+      "WebSearch",
+
+      "Edit({{REPO_PATH}}/docs/**)",
+      "Write({{REPO_PATH}}/docs/**)",
+
+      "--- below: queue of exact commands approved one-by-one by the harness; grows over time, prune to the backup (this line is a harmless string, matches nothing) ---",
+      "Bash(CI=true {{PKG_MANAGER}} test)",
+      "Bash({{PKG_MANAGER}} run build)"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "_KIT_NOTE": "KIT · [agnostic] — MCP server registration from a LOCAL BINARY (not npx). Copy to .mcp.json and enable the servers in .claude/settings.json -> enabledMcpjsonServers. Using the bin already installed in node_modules avoids runtime downloads (consistent with the npx deny) and pins the version to the lockfile. Replace name/command/args with your real server.",
+  "mcpServers": {
+    "example-server": {
+      "command": "./node_modules/.bin/example-mcp-server",
+      "args": ["mcp"]
+    }
+  }
+}

@@ -1,0 +1,360 @@
+---
+// KIT · [Node-ref] — home-dashboard generated at build-time by reading the corpus .md files. Expected behavior: it scrapes state (frontmatter, sections, checklists, open decisions) and renders it in widgets; the watcher rebuilds → the dashboard updates itself.
+/**
+ * {{PROJECT}} — Dynamic dashboard.
+ * All widgets are auto-generated at build-time by reading the project's .md files.
+ * Watcher rebuilds → dashboard updates.
+ *
+ * THE HELPER TOOLKIT BELOW IS REUSABLE AS-IS: frontmatter parser, section extractor
+ * by heading, list/checklist parser, timeAgo, fileToUrl, inline mini-md.
+ * What changes is only WHAT you aggregate: see "Data collection" further down.
+ */
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// The dashboard reads the corpus where it lives: ../../docs/ relative to the app root.
+const DOCS_ROOT = path.resolve(__dirname, '../../../../docs/');
+
+// ─── Helpers (reusable toolkit, domain-agnostic) ─────────────────────────────
+
+/** Recursively walks a dir and returns the absolute paths of all .md files. */
+function listMd(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...listMd(full));
+    else if (e.isFile() && e.name.endsWith('.md')) out.push(full);
+  }
+  return out;
+}
+
+/** YAML-lite frontmatter parser (scalar keys, enough for title/status/tag). */
+function parseFrontmatter(content: string): Record<string, string> {
+  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return {};
+  const fm: Record<string, string> = {};
+  for (const line of m[1].split('\n')) {
+    const kv = line.match(/^(\w+):\s*"?([^"\n]+?)"?$/);
+    if (kv) fm[kv[1]] = kv[2].trim();
+  }
+  return fm;
+}
+
+/** Title: frontmatter `title` → first H1 → file name. */
+function extractTitle(filePath: string, content: string): string {
+  const fm = parseFrontmatter(content);
+  if (fm.title) return fm.title;
+  const h1 = content.match(/^#\s+(.+)$/m);
+  if (h1) return h1[1].trim();
+  return path.basename(filePath, '.md');
+}
+
+/** Returns the body (text) under a given H2 heading, up to the next H2. */
+function extractSection(content: string, heading: string): string | null {
+  const lines = content.split('\n');
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const headingRe = new RegExp(`^##\\s+${escaped}\\s*$`, 'i');
+  const start = lines.findIndex((l) => headingRe.test(l));
+  if (start < 0) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (lines[i].startsWith('## ')) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).join('\n').trim();
+}
+
+/** Extracts the items of a list (bulleted or numbered) from a block of text. */
+function parseListItems(block: string): string[] {
+  const items: string[] = [];
+  const re = /^(?:\d+\.|[-*])\s+(.+)$/gm;
+  let m;
+  while ((m = re.exec(block)) !== null) {
+    items.push(m[1].trim());
+  }
+  return items;
+}
+
+function relPath(p: string): string {
+  return path.relative(DOCS_ROOT, p);
+}
+
+/** Time distance in English ("3 days ago"). */
+function timeAgo(date: Date): string {
+  const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} days ago`;
+  return `${Math.floor(d / 30)} months ago`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Inline markdown mini-renderer: **bold**, *italic*, `code`. Already escaped for HTML. */
+function renderInlineMd(text: string): string {
+  let s = escapeHtml(text);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  return s;
+}
+
+/** From a path-relative-to-docs to a site URL (collapses a folder README to the folder). */
+function fileToUrl(rp: string): string {
+  if (rp === 'README.md') return '/';
+  if (rp.endsWith('/README.md')) return '/' + rp.replace(/\/README\.md$/, '/');
+  return '/' + rp.replace(/\.md$/, '/');
+}
+
+// ─── Data collection ───────────────────────────────────────────────────────────
+// HERE you parameterize WHAT the dashboard aggregates. The helpers above stay unchanged.
+// Change the docs/ sections to count and the headings to scrape items from.
+
+// 1) Document count per top-level section (adapt the list to your docs/).
+const sections = ['architecture', 'implementation', 'identity'] as const;
+const sectionStats: Record<string, { count: number; files: string[] }> = {};
+for (const s of sections) {
+  const files = listMd(path.join(DOCS_ROOT, s));
+  sectionStats[s] = { count: files.length, files };
+}
+
+// 2) ADR — parsing the Status from the body ("**Status:** ..." line).
+const adrFiles = listMd(path.join(DOCS_ROOT, 'architecture/decisions'));
+const adrs = adrFiles
+  .map((f) => {
+    const content = fs.readFileSync(f, 'utf8');
+    const statusMatch = content.match(/\*\*Status:\*\*\s*(.+?)$/m);
+    const status = statusMatch ? statusMatch[1].trim() : '—';
+    return {
+      title: extractTitle(f, content),
+      status,
+      isAccepted: /accepted|✅|closed/i.test(status),
+      relPath: relPath(f),
+    };
+  })
+  .sort((a, b) => a.relPath.localeCompare(b.relPath));
+const adrAccepted = adrs.filter((a) => a.isAccepted).length;
+
+// Files to scrape special sections from: all the sections' .md files + their READMEs.
+const allMdFiles = sections
+  .flatMap((s) => {
+    const readme = path.join(DOCS_ROOT, s, 'README.md');
+    const files = sectionStats[s].files;
+    return files.includes(readme) ? files : [readme, ...files];
+  })
+  .filter((f) => fs.existsSync(f));
+
+// 3) "Open decisions" — collects the items under the H2 heading of the same name, anywhere.
+type DecisionItem = { text: string; source: string; sourceTitle: string };
+const openDecisions: DecisionItem[] = [];
+for (const f of allMdFiles) {
+  const content = fs.readFileSync(f, 'utf8');
+  const block = extractSection(content, 'Open decisions');
+  if (!block) continue;
+  const sourceTitle = extractTitle(f, content);
+  for (const item of parseListItems(block)) {
+    openDecisions.push({ text: item, source: relPath(f), sourceTitle });
+  }
+}
+
+// 4) Global roadmap — aggregates the `- [ ]` / `- [x]` checklists from the section READMEs.
+type RoadmapItem = { done: boolean; text: string };
+const roadmap: RoadmapItem[] = [];
+const roadmapSources = sections.map((s) => path.join(DOCS_ROOT, s, 'README.md'));
+for (const f of roadmapSources) {
+  if (!fs.existsSync(f)) continue;
+  const content = fs.readFileSync(f, 'utf8');
+  const re = /^[-*]\s+\[([ x])\]\s+(.+)$/gm;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    roadmap.push({ done: m[1] === 'x', text: m[2].trim() });
+  }
+}
+const roadmapDone = roadmap.filter((r) => r.done).length;
+
+// 5) Recent updates — top 8 by file mtime.
+const recent = allMdFiles
+  .map((f) => {
+    const content = fs.readFileSync(f, 'utf8');
+    return { relPath: relPath(f), title: extractTitle(f, content), mtime: fs.statSync(f).mtime };
+  })
+  .sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+  .slice(0, 8);
+
+const buildTime = new Date();
+---
+
+<StarlightPage
+  frontmatter={{
+    title: '{{PROJECT}} — Dashboard',
+    description: 'Project state: architecture, decisions, roadmap',
+    template: 'doc',
+    tableOfContents: false,
+    pagefind: false,
+    lastUpdated: false,
+  }}
+>
+  <p style="color: var(--sl-color-gray-3); font-size: 1.05rem; margin-top: 0;">
+    {{PROJECT}} at a glance — generated from the repo's documents.
+  </p>
+
+  <h2>At a glance</h2>
+  <CardGrid>
+    <Card title="Architecture ADRs" icon="seti:config">
+      <p class="dash-bignum">{adrAccepted}<span class="dash-bigsmall">/{adrs.length}</span></p>
+      <p class="dash-bigcap">decisions closed</p>
+    </Card>
+    <Card title="Implementation" icon="seti:notebook">
+      <p class="dash-bignum">{sectionStats.implementation.count}</p>
+      <p class="dash-bigcap">documents</p>
+    </Card>
+    <Card title="Roadmap" icon="rocket">
+      <p class="dash-bignum">{roadmapDone}<span class="dash-bigsmall">/{roadmap.length}</span></p>
+      <p class="dash-bigcap">checklist completed</p>
+    </Card>
+  </CardGrid>
+
+  <h2>Open decisions ({openDecisions.length})</h2>
+  {openDecisions.length === 0 ? (
+    <p class="dash-empty">No open decisions.</p>
+  ) : (
+    <ul class="dash-list">
+      {openDecisions.map((d) => (
+        <li>
+          <span set:html={renderInlineMd(d.text)} />
+          <a href={fileToUrl(d.source)} class="dash-source">{d.sourceTitle}</a>
+        </li>
+      ))}
+    </ul>
+  )}
+
+  <h2>Roadmap ({roadmapDone}/{roadmap.length})</h2>
+  <ul class="dash-list dash-roadmap">
+    {roadmap.map((r) => (
+      <li class={r.done ? 'done' : 'todo'}>
+        <span class="dash-check">{r.done ? '✅' : '⬜'}</span>
+        <span set:html={renderInlineMd(r.text)} />
+      </li>
+    ))}
+  </ul>
+
+  <h2>ADR — Architecture Decision Records</h2>
+  <ul class="dash-list">
+    {adrs.map((a) => (
+      <li>
+        <span class={`dash-tag ${a.isAccepted ? 'dash-tag-ok' : 'dash-tag-pending'}`}>{a.status}</span>
+        <a href={fileToUrl(a.relPath)}>{a.title}</a>
+      </li>
+    ))}
+  </ul>
+
+  <h2>Recent updates</h2>
+  <ul class="dash-list">
+    {recent.map((r) => (
+      <li>
+        <span class="dash-source dash-source-time">{timeAgo(r.mtime)}</span>
+        <a href={fileToUrl(r.relPath)}>{r.title}</a>
+      </li>
+    ))}
+  </ul>
+
+  <h2>Sections</h2>
+  <CardGrid>
+    <LinkCard title="Architecture" href="/architecture/" description={`${sectionStats.architecture.count} documents — technical design, ADRs, conventions`} />
+    <LinkCard title="Implementation" href="/implementation/" description={`${sectionStats.implementation.count} documents — workflow, state, journal`} />
+    <LinkCard title="Identity" href="/identity/" description={`${sectionStats.identity.count} documents — vision, values, perimeter`} />
+  </CardGrid>
+
+  <p class="dash-buildtime">Dashboard generated at build-time · {buildTime.toLocaleString('en-GB')}</p>
+</StarlightPage>
+
+<style>
+  .dash-bignum {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--sl-color-accent-high);
+    margin: 0;
+    line-height: 1.1;
+  }
+  .dash-bigsmall {
+    color: var(--sl-color-gray-3);
+    font-size: 1.2rem;
+    font-weight: 400;
+  }
+  .dash-bigcap {
+    margin: 0.25rem 0 0;
+    color: var(--sl-color-gray-3);
+    font-size: 0.9rem;
+  }
+  .dash-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 1.5rem;
+  }
+  .dash-list > li {
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--sl-color-hairline-light);
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    line-height: 1.4;
+  }
+  .dash-list > li:first-child {
+    border-top: 1px solid var(--sl-color-hairline-light);
+  }
+  .dash-source {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .dash-source:hover {
+    color: var(--sl-color-accent-high);
+  }
+  .dash-source-time {
+    font-variant-numeric: tabular-nums;
+  }
+  .dash-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.12rem 0.5rem;
+    border-radius: 4px;
+    background: var(--sl-color-bg-inline-code);
+    color: var(--sl-color-gray-2);
+    border: 1px solid var(--sl-color-hairline);
+    flex-shrink: 0;
+  }
+  .dash-tag-ok { background: rgba(57, 189, 160, 0.12); border-color: rgba(57, 189, 160, 0.4); color: #39bda0; }
+  .dash-tag-pending { background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.4); color: #fbbf24; }
+  .dash-roadmap .dash-check { font-size: 0.95rem; flex-shrink: 0; }
+  .dash-roadmap li.done { opacity: 0.55; text-decoration: line-through; text-decoration-color: var(--sl-color-gray-4); }
+  .dash-empty { color: var(--sl-color-gray-3); font-style: italic; }
+  .dash-buildtime {
+    font-size: 0.78rem;
+    color: var(--sl-color-gray-4);
+    margin-top: 3rem;
+    text-align: right;
+  }
+</style>

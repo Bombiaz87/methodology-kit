@@ -1,0 +1,26 @@
+# .gitignore della REPO del kit (non confonderlo con scaffold/.gitignore, che è un
+# template da spedire al progetto target). Qui c'è quasi solo testo: ignoriamo
+# soltanto build effimere e cruft di sistema.
+
+# Toolchain Node (solo se qualcuno builda scaffold/docs-site/ in locale)
+node_modules/
+dist/
+dist-next/
+dist-old/
+.astro/
+*.tsbuildinfo
+
+# Log e cruft OS/editor
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Segreti decifrati (difensivo: il kit non ne contiene, ma non vogliamo incidenti)
+*.dec.yaml
+*.plain.yaml
+secrets/*.dec.*
+
+# Cronaca interna di costruzione (NON portabile): resta in locale, fuori da GitHub.
+_meta/

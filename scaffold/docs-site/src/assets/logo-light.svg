@@ -1,0 +1,8 @@
+<!-- KIT · [Node-ref] — logo placeholder per tema CHIARO (testo scuro). Sostituiscilo col tuo. Referenziato da astro.config.mjs > starlight.logo.light. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="184" height="32" viewBox="0 0 184 32" role="img" aria-label="{{PROJECT}}">
+  <rect x="0" y="0" width="32" height="32" rx="7" fill="#0f172a"/>
+  <rect x="8" y="9" width="16" height="3.2" rx="1.6" fill="#ffffff"/>
+  <rect x="8" y="14.4" width="16" height="3.2" rx="1.6" fill="#ffffff"/>
+  <rect x="8" y="19.8" width="10" height="3.2" rx="1.6" fill="#ffffff"/>
+  <text x="42" y="22" font-family="ui-sans-serif,system-ui,sans-serif" font-size="17" font-weight="700" fill="#0f172a">{{PROJECT}}</text>
+</svg>
